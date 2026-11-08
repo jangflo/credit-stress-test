@@ -1,5 +1,7 @@
 # Stress Report
 
+**[Abrir el dashboard online](https://jangflo.github.io/credit-stress-test/)** — acceso público, sin instalación ni cuenta de GitHub.
+
 Abre **dashboard.html** con doble clic en un navegador moderno. Es un archivo autónomo: contiene los estilos, los gráficos, la lógica y los datos. No requiere instalación, servidor ni conexión a Internet.
 
 ## Contenido
