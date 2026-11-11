@@ -206,7 +206,7 @@ function graph(series, unit='amount', opts={}) {
       const bw=ys.length===3?32:23;
       s.values.forEach((v,i)=>{if(!numeric(v))return; const x=px(i)+(j-(series.length-1)/2)*(bw+5)-bw/2;
         const tooltip=`${s.name} · ${ys[i]}|${format(v,unit)}|${s.sources?.[i]||'Derived calculation'}`;
-        svg+=`<rect x="${Math.max(L-3,Math.min(W-R-bw+3,x))}" y="${Math.min(py(v),y0)}" width="${bw}" height="${Math.max(2,Math.abs(py(v)-y0))}" rx="4" fill="url(#bar-${id}-${j})" opacity="${j===0?.85:1}" tabindex="0" data-tooltip="${esc(tooltip)}" aria-label="${esc(tooltip.replaceAll('|',', '))}"/>`;
+        svg+=`<rect x="${Math.max(L-3,Math.min(W-R-bw+3,x))}" y="${Math.min(py(v),y0)}" width="${bw}" height="${Math.max(2,Math.abs(py(v)-y0))}" rx="4" fill="url(#bar-${id}-${j})" opacity="${s.dashed?.45:1}" tabindex="0" data-tooltip="${esc(tooltip)}" aria-label="${esc(tooltip.replaceAll('|',', '))}"/>`;
       });
     } else {
       const chunks=[];let chunk=[];
@@ -222,7 +222,7 @@ function graph(series, unit='amount', opts={}) {
     }
   });
   svg+='</svg>';
-  return `<div class="chart-legend">${series.map(s=>`<span class="legend-item"><i class="legend-line ${s.dashed?'dashed':''}" style="border-color:${s.color}"></i>${esc(s.name)}</span>`).join('')}</div><div class="chart-wrap">${svg}</div>${chartTable(series,unit,ys)}`;
+  return `<div class="chart-legend">${series.map(s=>`<span class="legend-item">${opts.bars?`<i class="legend-bar" style="background:${s.color};opacity:${s.dashed?.45:1}"></i>`:`<i class="legend-line ${s.dashed?'dashed':''}" style="border-color:${s.color}"></i>`}${esc(s.name)}</span>`).join('')}</div><div class="chart-wrap">${svg}</div>${chartTable(series,unit,ys)}`;
 }
 
 function chartPanel(row,opts={}) {
