@@ -114,7 +114,7 @@ const numeric = v => typeof v === 'number' && Number.isFinite(v);
 const format = (v, unit = 'amount', digits) => {
   if (!numeric(v)) return v == null || v === '' ? '—' : esc(v);
   const d = digits ?? (unit === 'percent' ? 2 : 1);
-  return new Intl.NumberFormat('en-GB', {minimumFractionDigits:d,maximumFractionDigits:d,useGrouping:true}).format(unit === 'percent' ? v * 100 : v) + (unit === 'percent' ? '%' : '');
+  return new Intl.NumberFormat('en-GB', {minimumFractionDigits:d,maximumFractionDigits:d,useGrouping:true}).format(unit === 'percent' ? v * 100 : v) + (unit === 'percent' ? '%' : unit === 'bps' ? ' bps' : '');
 };
 const signed = (v, d = 2) => numeric(v) ? (v > 0 ? '+' : '') + format(v,'amount',d) : '—';
 const compact = v => Math.abs(v) >= 10000 ? format(v / 1000,'amount',1) + 'k' : format(v,'amount',Math.abs(v) < 10 && v !== 0 ? 1 : 0);
@@ -148,9 +148,11 @@ const views = [
   {id:'flows',label:'Flows & transitions',title:'Portfolio movements',subtitle:'Inflows, outflows and stage transitions under IFRS 9.'},
   {id:'results',label:'P&L impact',title:'The cost of the scenario',subtitle:'Annual and cumulative provision impact on profit and loss.'},
   {id:'comparison',label:'EBA vs. ICAAP',title:'Two models, one portfolio',subtitle:'Compare saved model results under the same scenario.'},
+  {id:'drivers',label:'Risk drivers',title:'Explain the outcome',subtitle:'Reconcile model differences through NPL entries, cures and write-offs.'},
+  {id:'lab',label:'Risk lab',title:'From reporting to decisions',subtitle:'What-if recalculation, reverse stress testing and supplied capital inputs.'},
   {id:'data',label:'Data explorer',title:'Behind the numbers',subtitle:'All metrics, parameters and original workbook cells.'},
 ];
-const state = {view:'overview',model:'EBA',scenario:'adverse',dataTab:'metrics',query:'',category:'all',sheet:'ST Engine (EBA)',page:0};
+const state = {view:'overview',model:'EBA',scenario:'adverse',dataTab:'metrics',query:'',category:'all',sheet:'ST Engine (EBA)',page:0,comparisonScope:'selected',coverageScope:'selected',flowYear:2026,labTab:'sensitivity'};
 const colors = {baseline:'#57D994',adverse:'#3BC9CD',EBA:'#3BC9CD',ICAAP:'#57D994',stages:['#3BC9CD','#B4D988','#F391A1']};
 const years = DATA.meta.resultsYears;
 const snapshotDate = DATA.meta.importedAt ? new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'short',year:'numeric'}).format(new Date(DATA.meta.importedAt)) : 'Not specified';
@@ -162,7 +164,7 @@ const value = (r,model,scenario,i) => values(r,model,scenario)[i] ?? null;
 const sources = (r,model=state.model,scenario=state.scenario) => (DATA.engines[model].scenarios[scenario].sources[String(r)] || []).slice(0,4);
 const source = (r,model,scenario,i) => `'${DATA.engines[model].sheet}'!${sources(r,model,scenario)[i] || '—'}`;
 const scenarioLabel = () => state.scenario === 'adverse' ? 'Adverse' : 'Baseline';
-const unitLabel = unit => unit === 'percent' ? '%' : unit === 'text' ? 'Workbook status' : 'Excel units';
+const unitLabel = unit => unit === 'percent' ? '%' : unit === 'bps' ? 'Basis points' : unit === 'text' ? 'Workbook status' : 'Excel units';
 const cumulative = (model=state.model,scenario=state.scenario) => {
   const annual = values(73,model,scenario); let sum = 0;
   return annual.map((v,i) => { if(i===0) return 0; if(!numeric(v) || sum===null) {sum=null; return null;} return sum+=v; });
@@ -191,10 +193,11 @@ function graph(series, unit='amount', opts={}) {
   const step=[1,2,2.5,5,10].map(x=>x*magnitude).find(x=>x>=stepRaw)||magnitude*10;
   let min=Math.floor(rawMin/step)*step,max=Math.ceil(rawMax/step)*step;
   if(min===max) max=min+1;
-  const edgePadding=opts.bars?43:0;
+  const edgePadding=opts.bars?Math.max(43,series.length*14):0;
   const px=i=>L+edgePadding+i*(W-L-R-2*edgePadding)/Math.max(1,ys.length-1),py=v=>T+(max-v*mult)/(max-min)*(H-T-B);
   const y0=py(0), ticks=[]; for(let n=min;n<=max+step*.01;n+=step) ticks.push(Math.abs(n)<step*.0001?0:n);
-  const tickFmt=n=>unit==='percent'?format(n,'amount',step<1?1:0)+'%':compact(n);
+  const tickDigits=[0,1,2,3,4,5].find(d=>Math.abs(step-Number(step.toFixed(d)))<1e-9)??5;
+  const tickFmt=n=>unit==='percent'?format(n,'amount',tickDigits)+'%':compact(n);
   let svg=`<svg class="line-chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opts.title||'Evolution')} · ${esc(unitLabel(unit))}"><defs>${series.map((s,j)=>`<linearGradient id="area-${id}-${j}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="${s.color}" stop-opacity=".32"/><stop offset="100%" stop-color="${s.color}" stop-opacity="0"/></linearGradient><linearGradient id="bar-${id}-${j}" x1="0" y1="0" x2="0" y2="1"><stop stop-color="${s.color}"/><stop offset="1" stop-color="#1AA35D"/></linearGradient>`).join('')}</defs>`;
   svg+=ticks.map(n=>`<line class="chart-grid" x1="${L}" y1="${py(n/mult)}" x2="${W-R}" y2="${py(n/mult)}"/><text class="chart-label" x="${L-11}" y="${py(n/mult)+4}" text-anchor="end">${tickFmt(n)}</text>`).join('');
   svg+=ys.map((y,i)=>`<text class="chart-label" x="${px(i)}" y="${H-11}" text-anchor="middle">${y}${y===2025?' · SP':''}</text>`).join('');
@@ -254,6 +257,7 @@ function metricTable(rows,title='Indicator details',opts={}) {
 }
 
 const note = text => `<div class="note">${icon('info',15)}<div>${text}</div></div>`;
+const analysis=StressViews.create({data:DATA,state,format,numeric,esc,graph,colors,years,values,source,scenarioLabel,note,icon});
 
 function overviewHighlights() {
   const coverage=values(24),migration=values(28), max=Math.max(...migration.filter(numeric),.01);
@@ -277,7 +281,7 @@ function coveragePanel() {
 }
 
 function provisions() {
- return `<div class="grid grid-two">${chartPanel(16)}${chartPanel(24)}</div><div class="grid grid-two">${stageComposition(true)}${coveragePanel()}</div>${metricTable([16,17,18,19,20,21,22,23,24],'Provisions and coverage ratios')}`;
+ return `<div class="grid grid-two">${chartPanel(16)}${stageComposition(true)}</div>${analysis.coverage()}${metricTable([16,17,18,19,20,21,22,23,24],'Provisions and coverage ratios')}`;
 }
 
 function matrix() {
@@ -293,13 +297,13 @@ function flowBars() {
 }
 
 function flows() {
- return `<div class="grid grid-two">${chartPanel(34,{small:true})}${chartPanel(37,{small:true})}</div><div class="grid grid-two">${matrix()}${flowBars()}</div>${metricTable([9,10,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,64,65,66,67,71],'Transitions, flows and write-offs')}${note('The axis retains all four years. Projected annual flows begin in <strong>2026</strong>; dashes in 2025 indicate missing data, not zero values. Only transitions reported in the workbook are shown.')}`;
+ return `<div class="grid grid-two">${chartPanel(34,{small:true})}${chartPanel(37,{small:true})}</div>${analysis.sankey()}${matrix()}${metricTable([9,10,25,26,27,28,29,30,31,32,33,34,35,36,37,38,39,64,65,66,67,71],'Transitions, flows and write-offs')}${note('The axis retains all four years. Projected annual flows begin in <strong>2026</strong>; dashes in 2025 indicate missing data, not zero values. Only transitions reported in the workbook are shown.')}`;
 }
 
 function results() {
  const sc=state.scenario;
  const series=[{name:scenarioLabel(),color:colors[sc],values:cumulative(),sources:years.map((y,i)=>i===0?'Start of cumulative series (0)':`Sum of '${DATA.engines[state.model].sheet}'!${sc==='baseline'?'F':'K'}73:${sources(73)[i]}`)}];
- return `<div class="section-intro"><h2>Credit risk impact</h2><span>${scenarioLabel()} · 2025–2028 · original accounting sign</span></div><div class="kpi-grid">${kpi(73,'Annual P&L','Excel units',true)}${kpi(73,'Cumulative P&L','Sum since 2026 · Excel units',false,{values:cumulative().map((v,i)=>i?v:null)})}${kpi(16,'Provision stock','Excel units')}${kpi(67,'Net write-offs','Excel units')}</div><div class="grid grid-two">${chartPanel(73,{bars:true,subtitle:'Annual impact · Excel units'})}<section class="panel"><div class="panel-header"><div><h2>Cumulative P&L since 2026</h2><p>${scenarioLabel()} · sum of row 73 · Excel units</p></div></div>${graph(series,'amount',{title:'Cumulative P&L'})}</section></div>${note('<strong>Negative = expense / loss.</strong> Annual P&L uses the saved values in row 73. No additional one-off adjustment is added. The source workbook does not report separate one-off or capital adjustment rows.')}<div class="grid grid-two"><section class="panel"><div class="panel-header"><h2>How annual P&L is calculated</h2></div><div class="reading-list"><p class="reading-item"><strong>EBA</strong><br>Negative change in the provision stock: −(closing provisions − opening provisions).</p><p class="reading-item"><strong>ICAAP</strong><br>Negative sum of the provision stock change and net write-offs, as recorded in the workbook.</p></div></section><section class="panel"><div class="panel-header"><h2>How cumulative P&L is calculated</h2></div><div class="reading-list"><p class="reading-item">Each point sums annual impacts <strong>from 2026 through that year</strong>. All points are shown together. Stocks and percentages are not accumulated.</p><p class="reading-item">The cumulative series is a <strong>derived sum of row 73</strong> for both models. The current workbook does not contain a separate cumulative total row.</p></div></section></div>${metricTable([46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,73],'Impairment flows and their impact')}`;
+ return `<div class="section-intro"><h2>Credit risk impact</h2><span>${scenarioLabel()} · 2025–2028 · original accounting sign</span></div><div class="kpi-grid">${kpi(73,'Annual P&L','Excel units',true)}${kpi(73,'Cumulative P&L','Sum since 2026 · Excel units',false,{values:cumulative().map((v,i)=>i?v:null)})}${kpi(16,'Provision stock','Excel units')}${kpi(67,'Net write-offs','Excel units')}</div><div class="grid grid-two">${chartPanel(73,{bars:true,subtitle:'Annual impact · Excel units'})}<section class="panel"><div class="panel-header"><div><h2>Cumulative P&L since 2026</h2><p>${scenarioLabel()} · sum of row 73 · Excel units</p></div></div>${graph(series,'amount',{title:'Cumulative P&L'})}</section></div>${note('<strong>Negative = expense / loss.</strong> Annual P&L uses the saved values in row 73. No additional one-off adjustment is added. The source workbook does not report separate one-off or capital adjustment rows.')}${analysis.plBridge()}${analysis.costRisk()}${metricTable([46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66,67,73],'Impairment flows and their impact')}`;
 }
 
 function comparison() {
@@ -309,7 +313,7 @@ function comparison() {
    return series.map((s,j)=>`<tr>${j===0?`<td class="metric-name" rowspan="3">${row?`<button class="metric-link" data-detail="${row}">${esc(label)}${icon('arrow',13)}</button>`:esc(label)}${row?'':'<span class="table-source">Derived sum of annual impacts</span>'}</td>`:''}<td class="comparison-series">${s.name}</td>${s.vals.map(v=>`<td class="num ${j===0?'accent':''}">${j===2?(numeric(v)?signed(v,2)+(unit==='percent'?' pp':' units'):'—'):format(v,unit)}</td>`).join('')}</tr>`).join('');
  };
  const table=`<section class="panel"><div class="table-heading"><div><h2>Full-horizon comparison</h2><p>${scenarioLabel()} · Mortgages · 2025–2028</p></div><span class="row-chip">EBA − ICAAP</span></div><div class="table-wrap"><table class="comparison-table"><thead><tr><th>Indicator</th><th>Series</th>${years.map(y=>`<th class="num">${y}${y===2025?' · SP':''}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>comparisonRows(metric(r).label,metric(r).unit,values(r,'EBA'),values(r,'ICAAP'),r)).join('')}${comparisonRows('Cumulative P&L since 2026','amount',cumulative('EBA').map((v,i)=>i?v:null),cumulative('ICAAP').map((v,i)=>i?v:null))}</tbody></table></div></section>`;
- return `<div class="comparison-banner"><span class="compare-icon">${icon('comparison',23)}</span><div><h2>One scenario. Different balance sheet paths.</h2><p>For the mortgage results, EBA keeps total exposure constant. ICAAP reflects the model’s balance sheet changes. All four years are compared together under the ${scenarioLabel().toLowerCase()} scenario.</p></div></div><div class="grid grid-two">${chartPanel(70,{compare:true})}${chartPanel(16,{compare:true})}${chartPanel(11,{compare:true,small:true})}${chartPanel(73,{compare:true,bars:true,subtitle:'Annual impact · Excel units',small:true})}</div>${table}${note('Differences are shown as <strong>EBA minus ICAAP</strong>: in percentage points (pp) for ratios and Excel units for amounts. Each column compares the same year, scenario and portfolio.')}`;
+ return `<div class="comparison-banner"><span class="compare-icon">${icon('comparison',23)}</span><div><h2>One portfolio. Different balance sheet paths.</h2><p>EBA keeps total exposure constant. ICAAP applies exposure changes, cures and write-offs. Compare the selected scenario or both scenarios together.</p></div></div>${analysis.comparisonCharts()}${table}${note('The source table above follows the selected global scenario. Differences are <strong>EBA minus ICAAP</strong>: percentage points for ratios and Excel units for amounts. Combined charts clearly identify both scenarios.')}<div class="analysis-actions"><button class="button secondary" data-view="drivers">Explain the model gap ${icon('arrow',14)}</button><button class="text-btn" data-view="lab">Test the assumptions →</button></div>`;
 }
 
 function filteredMetrics() {
@@ -330,7 +334,7 @@ function rawTable() {
 
 function dataView() {
  const cats=[...new Set(METRICS.map(m=>m.category))];
- return `<div class="tabbar" role="tablist" aria-label="Data view"><button role="tab" data-data-tab="metrics" class="${state.dataTab==='metrics'?'active':''}" aria-selected="${state.dataTab==='metrics'}">Report metrics</button><button role="tab" data-data-tab="raw" class="${state.dataTab==='raw'?'active':''}" aria-selected="${state.dataTab==='raw'}">Original workbook · 4 sheets</button></div><div class="data-toolbar"><div class="input-wrap">${icon('search')}<input id="data-search" type="search" value="${esc(state.query)}" placeholder="${state.dataTab==='raw'?'Search cells, values or formulas…':'Filter metrics…'}" aria-label="Filter data"></div>${state.dataTab==='metrics'?`<select id="category-filter" aria-label="Metric category"><option value="all">All categories</option>${cats.map(c=>`<option ${state.category===c?'selected':''} value="${esc(c)}">${esc(c)}</option>`).join('')}</select>`:`<select id="sheet-filter" aria-label="Workbook sheet">${DATA.rawSheets.map(s=>`<option ${state.sheet===s.name?'selected':''} value="${esc(s.name)}">${esc(s.name)}</option>`).join('')}</select>`}<span class="data-count" id="data-count">${state.dataTab==='metrics'?filteredMetrics().length+' metrics':rawRecords().length+' cells'}</span></div><div id="data-table">${state.dataTab==='metrics'?metricTable(filteredMetrics().map(m=>m.row),'Full model series',{extra:true}):rawTable()}</div>${note(state.dataTab==='metrics'?'The 2029 column retains available forward-looking parameters, <strong>not a full set of projected results</strong>. Dashes preserve empty workbook cells. Additional EBA fields are not available in ICAAP.':'All <strong>four sheets and their populated cells</strong> are included. Database contains the portfolio inputs present in this workbook. Instructions provides workbook documentation; its examples do not represent the portfolio used for the results. Workbook text is translated for display; raw exports retain the original cell values.')}<section class="panel"><div class="panel-header"><h2>Source and scope</h2></div><div class="reading-list"><p class="reading-item"><strong>${esc(DATA.meta.sourceFile)}</strong><br>${esc(sourceSummary)}. The workbook does not specify a version date. Saved results for <strong>Mortgages</strong>.</p><p class="reading-item">${DATA.checks.populatedCells} populated cells · ${DATA.checks.formulaCount} formulas with saved values. <strong>No formula errors detected</strong> during extraction. This HTML is a snapshot of the file; it does not recalculate or sync automatically.</p><p class="reading-item">Currency and monetary scale are not specified in the source. Amounts use <strong>Excel units</strong>. Comparisons, allocation percentages and cumulative sums are derived exclusively from the saved data.</p></div></section>`;
+ return `<div class="tabbar" role="tablist" aria-label="Data view"><button role="tab" data-data-tab="metrics" class="${state.dataTab==='metrics'?'active':''}" aria-selected="${state.dataTab==='metrics'}">Report metrics</button><button role="tab" data-data-tab="raw" class="${state.dataTab==='raw'?'active':''}" aria-selected="${state.dataTab==='raw'}">Original workbook · 4 sheets</button></div><div class="data-toolbar"><div class="input-wrap">${icon('search')}<input id="data-search" type="search" value="${esc(state.query)}" placeholder="${state.dataTab==='raw'?'Search cells, values or formulas…':'Filter metrics…'}" aria-label="Filter data"></div>${state.dataTab==='metrics'?`<select id="category-filter" aria-label="Metric category"><option value="all">All categories</option>${cats.map(c=>`<option ${state.category===c?'selected':''} value="${esc(c)}">${esc(c)}</option>`).join('')}</select>`:`<select id="sheet-filter" aria-label="Workbook sheet">${DATA.rawSheets.map(s=>`<option ${state.sheet===s.name?'selected':''} value="${esc(s.name)}">${esc(s.name)}</option>`).join('')}</select>`}<span class="data-count" id="data-count">${state.dataTab==='metrics'?filteredMetrics().length+' metrics':rawRecords().length+' cells'}</span></div><div id="data-table">${state.dataTab==='metrics'?metricTable(filteredMetrics().map(m=>m.row),'Full model series',{extra:true}):rawTable()}</div>${note(state.dataTab==='metrics'?'The 2029 column retains available forward-looking parameters, <strong>not a full set of projected results</strong>. Dashes preserve empty workbook cells. Additional EBA fields are not available in ICAAP.':'All <strong>four sheets and their populated cells</strong> are included. Database contains the portfolio inputs present in this workbook. Instructions provides workbook documentation; its examples do not represent the portfolio used for the results. Workbook text is translated for display; raw exports retain the original cell values.')}<section class="panel"><div class="panel-header"><h2>Source and scope</h2></div><div class="reading-list"><p class="reading-item"><strong>${esc(DATA.meta.sourceFile)}</strong><br>${esc(sourceSummary)}. The workbook does not specify a version date. Saved results for <strong>Mortgages</strong>.</p><p class="reading-item">${DATA.checks.populatedCells} populated cells · ${DATA.checks.formulaCount} formulas with saved values. <strong>No formula errors detected</strong> during extraction. Saved report views remain a snapshot. Risk lab provides a separate recalculation of the supplied model; it does not modify or sync the Excel file.</p><p class="reading-item">Currency and monetary scale are not specified in the source. Amounts use <strong>Excel units</strong>. Comparisons, allocation percentages and cumulative sums are derived exclusively from the saved data.</p></div></section>`;
 }
 
 function renderDataTable() {
@@ -351,7 +355,7 @@ function render() {
  $$('[data-model]').forEach(b=>{b.classList.toggle('active',b.dataset.model===state.model);b.setAttribute('aria-pressed',String(b.dataset.model===state.model));});
  $('#scenario-select').value=state.scenario;
  chartId=0;
- $('#view').innerHTML=({overview,credit,provisions,flows,results,comparison,data:dataView})[state.view]();
+ $('#view').innerHTML=({overview,credit,provisions,flows,results,comparison,drivers:analysis.drivers,lab:analysis.lab,data:dataView})[state.view]();
  if(state.view==='data')renderDataTable();
  $('.source-card strong').textContent='IFRS9 & Stress Test';
  $('.source-card > span:not(.eyebrow)').textContent='Updated dataset';
@@ -362,7 +366,7 @@ function render() {
  const next=views[(views.indexOf(v)+1)%views.length];$('#next-section').textContent=next.label+' →';$('#next-section').dataset.view=next.id;
  $('#model-switch').setAttribute('aria-label',state.view==='comparison'?'Model for metric details. Charts compare both models.':'Report model');
   $('#model-switch').previousElementSibling.textContent=state.view==='comparison'?'Details':'Model';
- renderInsights();syncURL();hideTooltip();
+ renderInsights();$('#insights').hidden=state.view==='lab'||state.view==='drivers';syncURL();hideTooltip();
 }
 
 function syncURL() {
@@ -405,10 +409,13 @@ function csvValue(v) {
 }
 function exportCSV() {
  let rows,filename;
- if(state.view==='data'&&state.dataTab==='raw') {
+ if(state.view==='lab'||state.view==='drivers'){
+   const derived=analysis.exportRows();if(!derived){toast('Apply valid assumptions before exporting calculated results.');return;}
+   rows=derived.rows;filename=derived.filename;
+ } else if(state.view==='data'&&state.dataTab==='raw') {
    rows=[['Sheet','Cell','Saved value','Original formula','Format'],...rawRecords().map(c=>[state.sheet,c.address,c.value,c.formula,c.numberFormat])];filename='cells-'+state.sheet;
  } else if(state.view==='comparison') {
-   rows=[['Model','Scenario','Year','Metric','Unit','Value','Source'],...['EBA','ICAAP'].flatMap(model=>METRICS.flatMap(m=>years.map((y,i)=>[model,scenarioLabel(),y,m.label,m.unit,value(m.row,model,state.scenario,i),source(m.row,model,state.scenario,i)])))];filename='comparison-EBA-ICAAP';
+   rows=[['Model','Scenario','Year','Metric','Unit','Value','Source'],...['EBA','ICAAP'].flatMap(model=>(state.comparisonScope==='all'?['baseline','adverse']:[state.scenario]).flatMap(sc=>METRICS.flatMap(m=>years.map((y,i)=>[model,sc==='baseline'?'Baseline':'Adverse',y,m.label,m.unit,value(m.row,model,sc,i),source(m.row,model,sc,i)]))))];filename='comparison-EBA-ICAAP';
  } else {
    const ms=state.view==='data'?filteredMetrics():METRICS;
    rows=[['Model','Scenario','Year','Metric','Unit','Value','Source'],...ms.flatMap(m=>[state.scenario].flatMap(sc=>DATA.periods.map((y,i)=>[state.model,sc==='baseline'?'Baseline':'Adverse',y,m.label,m.unit,DATA.engines[state.model].scenarios[sc].rows[String(m.row)]?.[i]??null,`'${DATA.engines[state.model].sheet}'!${DATA.engines[state.model].scenarios[sc].sources[String(m.row)]?.[i]||''}`])))];filename='stress-test-'+state.model+'-'+scenarioLabel();
@@ -416,7 +423,7 @@ function exportCSV() {
  const csv='\ufeff'+rows.map(r=>r.map(csvValue).join(';')).join('\r\n');
  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8;'}));
  const a=document.createElement('a');a.href=url;a.download=filename.replace(/[^a-zA-Z0-9-]/g,'_')+'.csv';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
- toast('CSV exported · original unrounded values');
+ toast(state.view==='lab'||state.view==='drivers'?'CSV exported · derived calculations and assumptions':'CSV exported · original unrounded values');
 }
 let toastTimer;
 function toast(message) {$('#toast').textContent=message;$('#toast').classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('#toast').classList.remove('show'),3200);}
@@ -434,6 +441,7 @@ $('#home-icon').innerHTML=icon('home',17);$('#search-icon').innerHTML=icon('sear
 
 document.addEventListener('click',e=>{
  const b=e.target.closest('button,a');if(!b)return;
+ if(analysis.click(b)){render();return;}
  if(b.dataset.view){e.preventDefault();navigate(b.dataset.view);}
  if(b.dataset.model){state.model=b.dataset.model;if(state.dataTab==='raw'&&state.sheet.startsWith('ST Engine'))state.sheet=DATA.engines[state.model].sheet;render();}
  if(b.dataset.detail)showDetail(Number(b.dataset.detail));
@@ -444,11 +452,13 @@ document.addEventListener('click',e=>{
  if(b.dataset.searchDetail){$('#search-dialog').close();showDetail(Number(b.dataset.searchDetail));}
 });
 document.addEventListener('change',e=>{
+ if(analysis.change(e.target)){render();return;}
  if(e.target.id==='scenario-select'){state.scenario=e.target.value;render();}
  if(e.target.id==='category-filter'){state.category=e.target.value;renderDataTable();}
  if(e.target.id==='sheet-filter'){state.sheet=e.target.value;state.page=0;renderDataTable();}
 });
 document.addEventListener('input',e=>{
+ analysis.input(e.target);
  if(e.target.id==='data-search'){state.query=e.target.value;state.page=0;renderDataTable();}
  if(e.target.id==='global-search')searchResults();
 });

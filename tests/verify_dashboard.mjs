@@ -29,6 +29,8 @@ window.HTMLElement.prototype.click=function(){if(this.download)downloadName=this
 window.scrollTo=()=>{};window.print=()=>{printCalls++;};
 const context={document,window,console,Intl,URLSearchParams,URL:mockedURL,Blob:MockBlob,matchMedia:()=>({matches:true}),innerWidth:1440,innerHeight:1000,
  location:{hash:'#overview?modelo=EBA&escenario=adverse&corte=2026'},history:{replaceState(_s,_t,url){lastURL=url;}},setTimeout:fn=>{fn();return 1;},clearTimeout(){}};
+vm.runInNewContext(fs.readFileSync(new URL('../src/risk-engine.js',import.meta.url),'utf8'),context,{filename:'risk-engine.js'});
+vm.runInNewContext(fs.readFileSync(new URL('../src/risk-views.js',import.meta.url),'utf8'),context,{filename:'risk-views.js'});
 vm.runInNewContext(js,context,{filename:'dashboard.js'});
 let checks=0;
 const $=s=>document.querySelector(s);
@@ -49,7 +51,7 @@ function allYears(){
  assert.ok(!/corte=/.test(lastURL),'Year cut must not remain in URLs');
  for(const chart of document.querySelectorAll('#view svg.line-chart'))for(const year of data.meta.resultsYears)assert.ok(chart.textContent.includes(String(year)),`Chart missing ${year}`);
  for(const kpi of document.querySelectorAll('#view .kpi-years'))for(const year of data.meta.resultsYears)assert.ok(kpi.querySelector(`[data-year-value="${year}"]`),`KPI missing ${year}`);
- for(const table of document.querySelectorAll('#view table:not(.raw-table)'))for(const year of data.meta.resultsYears)assert.ok(table.querySelector('thead')?.textContent.includes(String(year)),`Table missing year column ${year}`);
+ for(const table of document.querySelectorAll('#view table:not(.raw-table):not([data-period-context])'))for(const year of data.meta.resultsYears)assert.ok(table.querySelector('thead')?.textContent.includes(String(year)),`Table missing year column ${year}`);
  checks++;
 }
 assert.ok(html.includes(js),'Standalone HTML must contain the current application code');
@@ -135,4 +137,37 @@ for(const model of ['EBA','ICAAP'])for(const scenario of ['baseline','adverse'])
  assert.equal(r['11'][4],null);assert.equal(r['73'][4],null);
 }
 assert.equal(data.checks.excelErrors.length,0);assert.equal(data.checks.missingFormulaCaches.length,0);
-console.log(`PASS: ${checks} DOM operations/checks; 28 report/filter combinations, ${data.metrics.length*4} metric dialogs, all years visible, isolated scenarios, search, pagination, exports, printing, and financial reconciliations.`);
+const calc=context.StressRisk.createEngine(data);
+for(const model of ['EBA','ICAAP'])for(const scenario of ['baseline','adverse']){
+ click(`[data-model="${model}"]`);change('#scenario-select',scenario);
+ click('#navigation [data-view="drivers"]');clean();assert.equal(document.querySelectorAll('.waterfall-chart').length,3);assert.ok($('#view').textContent.includes('not isolated causal effects'));
+ click('#export-button');assert.ok((await exportedBlob.text()).includes('Opening 2025'));
+ click('#navigation [data-view="flows"]');
+ for(const year of [2026,2027,2028]){change('#flow-year',year);clean();assert.ok($('.sankey-chart').getAttribute('aria-label').includes(year));assert.ok($('#view').textContent.includes('Every opening and closing node reconciles.'));}
+ click('#navigation [data-view="comparison"]');click('[data-analysis-scope="all"][data-scope-kind="comparison"]');clean();
+ assert.equal(document.querySelectorAll('.compare-stage-timeline').length,2);assert.equal(document.querySelectorAll('.growth-table').length,1);
+ for(const legend of [...document.querySelectorAll('#view .chart-legend')].slice(0,5)){assert.ok(legend.textContent.includes('Baseline'));assert.ok(legend.textContent.includes('Adverse'));}
+ click('#export-button');csv=await exportedBlob.text();assert.ok(csv.includes('"Baseline"')&&csv.includes('"Adverse"'));
+ click('[data-analysis-scope="selected"][data-scope-kind="comparison"]');clean();
+ click('#navigation [data-view="provisions"]');click('[data-analysis-scope="all"][data-scope-kind="coverage"]');clean();assert.equal(document.querySelectorAll('#view svg.line-chart').length,5);
+ click('[data-analysis-scope="selected"][data-scope-kind="coverage"]');
+ click('#navigation [data-view="lab"]');click('[data-lab-tab="sensitivity"]');click('[data-risk-action="reset"]');
+ input('#shock-defaults','25');click('[data-risk-action="apply"]');clean();
+ assert.ok($('.simulation-summary').textContent.includes(new Intl.NumberFormat('en-GB',{minimumFractionDigits:2,maximumFractionDigits:2}).format(calc.simulate(model,scenario,{defaults:25}).npl*100)));
+ assert.equal(document.querySelectorAll('.tornado-chart').length,1);
+ click('#export-button');assert.ok((await exportedBlob.text()).includes('Recalculated value'));
+ input('#shock-defaults','');click('[data-risk-action="apply"]');assert.ok($('.analysis-error').textContent.includes('enter a number'));assert.equal($('.simulation-summary'),null);
+ click('[data-risk-action="reset"]');clean();
+ click('[data-lab-tab="reverse"]');change('#reverse-metric','loss');input('#reverse-limit','1000000000');click('[data-risk-action="reverse"]');clean();assert.ok($('.reverse-result').textContent.includes('not reached'));
+ input('#reverse-limit','');click('[data-risk-action="reverse"]');assert.ok($('.reverse-result').textContent.includes('positive limit'));
+ change('#reverse-metric','npl');input('#reverse-limit','5');click('[data-risk-action="reverse"]');clean();assert.ok($('.reverse-result').textContent.includes('already'));
+ input('#reverse-limit','12');click('[data-risk-action="reverse"]');assert.equal(document.querySelectorAll('.stress-heatmap tbody td').length,25);
+ click('#export-button');assert.ok((await exportedBlob.text()).includes('Default shock %'));
+ click('[data-lab-tab="capital"]');click('[data-risk-action="capital-reset"]');assert.ok($('.capital-empty'));
+ click('[data-risk-action="capital"]');assert.ok($('.analysis-error'));
+ for(const [id,v] of Object.entries({opening:5000,tax:0,threshold:10,rwa0:20000,rwa1:21000,rwa2:22000,rwa3:23000,other0:0,other1:0,other2:0}))input('#cap-'+id,String(v));
+ click('[data-risk-action="capital"]');clean();assert.equal(document.querySelectorAll('#capital-output svg.line-chart').length,2);
+ click('#export-button');assert.ok((await exportedBlob.text()).includes('CET1 ratio'));
+ input('#cap-opening','6000');assert.equal($('#capital-output').hidden,true);
+}
+console.log(`PASS: ${checks} DOM operations/checks; original report navigation and ${data.metrics.length*4} dialogs, both-scenario charts, all migration years, attribution, what-if inputs/exports, reverse limits and supplied capital projections.`);
