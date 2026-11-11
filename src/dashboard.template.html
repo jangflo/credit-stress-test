@@ -1,50 +1,52 @@
 <!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#f8f9fb">
-  <meta name="description" content="Reporte interactivo de los stress tests EBA e ICAAP. Datos del modelo IFRS9, 2025–2028.">
+  <meta name="theme-color" content="#002236">
+  <meta name="description" content="Interactive EBA and ICAAP stress test report. IFRS 9 model data, 2025–2028.">
   <title>Stress Report · EBA & ICAAP</title>
   <style>/*__CSS__*/</style>
 </head>
 <body>
-  <a class="skip-link" href="#main">Ir al contenido</a>
-  <aside class="sidebar" id="sidebar" aria-label="Navegación del reporte">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <aside class="sidebar" id="sidebar" aria-label="Report navigation">
     <a class="brand" href="#overview"><span class="brand-mark"><i></i><i></i><i></i></span><span>STRESS<span class="brand-second">REPORT</span></span></a>
-    <div class="workspace-tag"><span class="status-dot"></span> IFRS 9 · Riesgo de crédito</div>
-    <div class="nav-label">EL REPORTE</div>
+    <button class="icon-btn sidebar-close" id="sidebar-close" aria-label="Close navigation">✕</button>
+    <div class="workspace-tag"><span class="status-dot"></span> IFRS 9 · Credit risk</div>
+    <div class="nav-label">THE REPORT</div>
     <nav id="navigation"></nav>
     <div class="sidebar-bottom">
-      <div class="source-card"><span class="eyebrow">FUENTE DEL REPORTE</span><strong>IFRS9 & Stress Test</strong><span>Edición 2026–27</span><button data-view="data" class="text-btn">Explorar el Excel <span aria-hidden="true">↗</span></button></div>
-      <div class="sidebar-footer"><span class="mini-mark">ST</span><div>Modelo financiero<small>Hipotecas · Mortgages</small></div></div>
+      <div class="source-card"><span class="eyebrow">REPORT SOURCE</span><strong>IFRS9 & Stress Test</strong><span>2026–27 edition</span><button data-view="data" class="text-btn">Explore the workbook <span aria-hidden="true">↗</span></button></div>
+      <div class="sidebar-footer"><span class="mini-mark">ST</span><div>Financial model<small>Mortgages</small></div></div>
     </div>
   </aside>
+  <button class="sidebar-scrim" id="sidebar-scrim" aria-label="Close navigation" tabindex="-1" hidden></button>
   <div class="app-shell">
     <header class="topbar">
-      <div class="breadcrumbs"><button class="icon-btn mobile-menu" id="menu-button" aria-label="Abrir navegación" aria-expanded="false"></button><span class="crumb-home" id="home-icon"></span><span>Reportes</span><span class="slash">/</span><strong id="breadcrumb">Visión general</strong></div>
-      <div class="top-actions"><button class="search-trigger" id="search-button"><span id="search-icon"></span><span>Buscar en el reporte</span><kbd>⌘ K</kbd></button><button class="icon-btn" id="print-button" aria-label="Imprimir la vista actual" title="Imprimir la vista actual"></button><span class="top-divider"></span><span class="profile">ST</span></div>
+      <div class="breadcrumbs"><button class="icon-btn mobile-menu" id="menu-button" aria-label="Open navigation" aria-expanded="false" aria-controls="sidebar"></button><span class="crumb-home" id="home-icon"></span><span>Reports</span><span class="slash">/</span><strong id="breadcrumb">Overview</strong></div>
+      <div class="top-actions"><button class="search-trigger" id="search-button"><span id="search-icon"></span><span>Search the report</span><kbd>⌘ K</kbd></button><button class="icon-btn" id="print-button" aria-label="Print current view" title="Print current view"></button><span class="top-divider"></span><span class="profile">ST</span></div>
     </header>
     <div class="workspace">
       <main id="main" tabindex="-1">
-        <div class="page-heading"><div><div class="eyebrow" id="page-eyebrow">ANÁLISIS DE ESCENARIOS · 2025—2028</div><h1 id="page-title">Riesgo bajo estrés<span>.</span></h1><p id="page-subtitle">Una visión integrada de la calidad crediticia y su impacto financiero.</p></div><button class="button secondary" id="export-button"></button></div>
-        <div class="filterbar" aria-label="Filtros del reporte">
-          <div class="filter-group"><span class="filter-label">Modelo</span><div class="segmented" id="model-switch"><button data-model="EBA">EBA</button><button data-model="ICAAP">ICAAP</button></div></div>
-          <div class="filter-group"><label class="filter-label" for="scenario-select">Escenario</label><select id="scenario-select"><option value="adverse">Adverso</option><option value="baseline">Base</option></select></div>
-          <div class="report-horizon"><span class="filter-label">Horizonte completo</span><strong>2025 — 2028</strong></div>
-          <span class="portfolio-badge" id="portfolio-badge">Hipotecas</span>
+        <div class="page-heading"><div><div class="eyebrow" id="page-eyebrow">SCENARIO ANALYSIS · 2025—2028</div><h1 id="page-title">Risk under stress<span>.</span></h1><p id="page-subtitle">An integrated view of credit quality and its financial impact.</p></div><button class="button secondary" id="export-button"></button></div>
+        <div class="filterbar" aria-label="Report filters">
+          <div class="filter-group"><span class="filter-label">Model</span><div class="segmented" id="model-switch"><button data-model="EBA">EBA</button><button data-model="ICAAP">ICAAP</button></div></div>
+          <div class="filter-group"><label class="filter-label" for="scenario-select">Scenario</label><select id="scenario-select"><option value="adverse">Adverse</option><option value="baseline">Baseline</option></select></div>
+          <div class="report-horizon"><span class="filter-label">Full horizon</span><strong>2025 — 2028</strong></div>
+          <span class="portfolio-badge" id="portfolio-badge">Mortgages</span>
         </div>
         <div id="view" aria-live="polite" aria-atomic="false"></div>
-        <footer class="report-footer"><span>IFRS9 & Stress Test Tool 2026–27 <span class="footer-dot">·</span> <span id="footer-context"></span></span><button class="text-btn" id="next-section">Siguiente sección →</button></footer>
+        <aside class="insights" id="insights" aria-label="Scenario insights"></aside>
+        <footer class="report-footer"><span>IFRS9 & Stress Test Tool 2026–27 <span class="footer-dot">·</span> <span id="footer-context"></span></span><button class="text-btn" id="next-section">Next section →</button></footer>
       </main>
-      <aside class="insights" id="insights" aria-label="Lectura del escenario"></aside>
     </div>
   </div>
-  <dialog id="search-dialog" class="search-dialog"><div class="search-modal-head"><span id="modal-search-icon"></span><input id="global-search" type="search" placeholder="Buscar una métrica, sección o concepto…" aria-label="Buscar en el reporte" autocomplete="off"><button class="key-button" data-close="search-dialog" aria-label="Cerrar búsqueda">Esc</button></div><div id="search-results"></div><div class="search-help">Busca por nombre, código original o número de fila del Excel.</div></dialog>
-  <dialog id="detail-dialog" class="detail-dialog"><button class="icon-btn close-dialog" data-close="detail-dialog" aria-label="Cerrar detalle">✕</button><div id="detail-content"></div></dialog>
+  <dialog id="search-dialog" class="search-dialog"><div class="search-modal-head"><span id="modal-search-icon"></span><input id="global-search" type="search" placeholder="Search for a metric, section or concept…" aria-label="Search the report" autocomplete="off"><button class="key-button" data-close="search-dialog" aria-label="Close search">Esc</button></div><div id="search-results"></div><div class="search-help">Search by name, original code or workbook row number.</div></dialog>
+  <dialog id="detail-dialog" class="detail-dialog"><button class="icon-btn close-dialog" data-close="detail-dialog" aria-label="Close details">✕</button><div id="detail-content"></div></dialog>
   <div id="tooltip" class="chart-tooltip" role="tooltip" hidden></div>
   <div id="toast" role="status" class="toast"></div>
-  <noscript><p>Activa JavaScript para navegar por el reporte interactivo.</p></noscript>
+  <noscript><p>Enable JavaScript to navigate the interactive report.</p></noscript>
   <script id="report-data" type="application/json">/*__DATA__*/</script>
   <script>/*__JS__*/</script>
 </body>

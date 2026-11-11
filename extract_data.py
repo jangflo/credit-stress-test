@@ -16,7 +16,7 @@ from pathlib import Path
 import openpyxl
 from openpyxl.utils import get_column_letter
 
-DEFAULT_SOURCE = Path(__file__).resolve().parent.parent / 'IFRS9 and Stress Test Tool 2026-27.xlsx'
+DEFAULT_SOURCE = Path.home() / 'Downloads' / 'FINAL_IFRS9 and Stress Test Tool.xlsx'
 PERIODS = [2025, 2026, 2027, 2028, 2029]
 LABELS = {
     9: 'Crecimiento de la exposición', 10: 'Nuevas exposiciones / amortizaciones',
@@ -115,8 +115,12 @@ def extract(source):
             'cells': cells, 'mergedRanges': [str(r) for r in sheet.merged_cells.ranges],
         })
 
+    active_rows = [r for r in LABELS if any(
+        values[f'ST Engine ({model})'][f'{col}{r}'].value is not None
+        for model in ['EBA', 'ICAAP'] for col in ['B', 'C', 'E', 'F', 'G', 'H', 'J', 'K', 'L', 'M'])]
     metrics = []
-    for row, label in LABELS.items():
+    for row in active_rows:
+        label = LABELS[row]
         original = values['ST Engine (EBA)'][f'C{row}'].value or values['ST Engine (EBA)'][f'B{row}'].value
         description = values['Instructions'][f'J{row}'].value
         metrics.append({
@@ -135,8 +139,8 @@ def extract(source):
             columns = [get_column_letter(i) for i in range(first, first + 5)]
             scenarios[scenario] = {
                 'label': label, 'columns': columns,
-                'rows': {str(r): [serial(sheet[f'{col}{r}'].value) for col in columns] for r in LABELS},
-                'sources': {str(r): [f'{col}{r}' for col in columns] for r in LABELS},
+                'rows': {str(r): [serial(sheet[f'{col}{r}'].value) if i < 4 or isinstance(sheet[f'{col}{r}'].value, (int, float)) else None for i, col in enumerate(columns)] for r in active_rows},
+                'sources': {str(r): [f'{col}{r}' for col in columns] for r in active_rows},
             }
         engines[model] = {'sheet': sheet_name, 'segment': sheet['C5'].value, 'scenarios': scenarios}
 
@@ -172,8 +176,9 @@ def extract(source):
 
     data = {
         'meta': {
-            'sourceFile': source.name, 'sourceDate': '2026-10-30',
-            'sourceDateReference': "'ST Engine (EBA)'!C84; 'ST Engine (ICAAP)'!C84",
+            'sourceFile': source.name, 'sourceDate': None,
+            'importedAt': datetime.now().astimezone().isoformat(),
+            'sourceDateReference': None,
             'sha256': hashlib.sha256(source.read_bytes()).hexdigest(),
             'segment': 'Mortgages', 'segmentLabel': 'Hipotecas',
             'amountUnit': 'unidades del Excel', 'currency': None,
@@ -181,11 +186,11 @@ def extract(source):
             'valueBasis': 'Valores guardados en el Excel, sin recalcular ni modificar el libro.',
             'notes': [
                 'Los dos motores contienen resultados guardados para Mortgages (Hipotecas).',
-                'Database contiene parámetros de otras tres carteras; no contiene sus resultados de stress test.',
+                'Database contiene los parámetros de las carteras indicadas en database.portfolios.',
                 '2029 aparece solo para algunos parámetros forward; no es un ejercicio completo de resultados.',
                 'El Excel no declara moneda ni escala monetaria. Se conservan las unidades originales.',
-                'Impacto P&L anual: signo negativo indica gasto/pérdida; el escenario adverso incluye su one-off en 2026.',
-                'El one-off IFRS 9 de la fila 75 impacta capital, separado del P&L.',
+                'Impacto P&L anual: se conserva el valor guardado y su signo contable, sin añadir ajustes.',
+                'El archivo no incluye las filas auxiliares de one-offs, acumulados y controles de la versión anterior.',
             ],
         },
         'periods': PERIODS, 'metrics': metrics, 'engines': engines,
